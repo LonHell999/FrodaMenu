@@ -47,9 +47,9 @@ footer{background:var(--deep);color:#eae8da;text-align:center;padding:40px 20px}
 <section id="loginView" class="hidden">
   <div class="login-wrap"><div class="panel">
     <div class="eyebrow">FRODA PRIVATE AREA</div><h2 style="font:500 30px 'Playfair Display';color:var(--green);margin:10px 0">Admin Login</h2>
-    <p class="hint">Sign in with the admin email and password you created in Supabase.</p>
+    <p class="hint">Enter your admin username and password.</p>
     <form id="loginForm" style="margin-top:18px">
-      <div class="field"><label for="loginEmail">Email</label><input id="loginEmail" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="loginEmail">Username</label><input id="loginEmail" type="text" autocomplete="username" required placeholder="admin"></div>
       <div class="field" style="margin-top:12px"><label for="loginPassword">Password</label><input id="loginPassword" type="password" autocomplete="current-password" required></div>
       <div class="form-actions"><button class="btn" type="submit">Sign in</button><a class="btn light" href="/">Back to menu</a></div>
     </form><div id="loginMessage" aria-live="polite"></div>
@@ -101,9 +101,12 @@ footer{background:var(--deep);color:#eae8da;text-align:center;padding:40px 20px}
    Project Settings -> API -> Project URL and publishable key.
    NEVER put a service_role / secret key in this file.
 -------------------------------------------------------- */
-const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
-const SUPABASE_PUBLISHABLE_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
+const SUPABASE_URL = "https://unesutywcavgbdtdaape.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_KFon7aIilKUojoh5AzGafA_0cHik5YL";
 const IMAGE_BUCKET = "menu-images";
+// Username is mapped to this Supabase Auth email. Create this user in Supabase.
+const ADMIN_USERNAME = "admin";
+const ADMIN_AUTH_EMAIL = "admin@froda.example";
 
 const $ = (id) => document.getElementById(id);
 const configured = SUPABASE_URL.startsWith("https://") &&
@@ -172,13 +175,14 @@ function renderPublicMenu(){
 }
 
 async function isAllowedAdmin(){
- const {data:{user}}=await db.auth.getUser();
+ const {data:{user},error:userError}=await db.auth.getUser();
+  if(userError)return false;
  if(!user)return false;
  const {data,error}=await db.rpc("is_froda_admin");
  return !error&&data===true;
 }
 async function route(){
- if(!configured){setView(isAdminPath()?"login":"public");if(isAdminPath())showMessage("loginMessage","Add your Supabase URL and publishable key to index.html first.",true);return}
+ if(!db){setView(isAdminPath()?"login":"public");if(isAdminPath())showMessage("loginMessage","Add your Supabase URL and publishable key to index.html first.",true);return}
  const {data:{session}}=await db.auth.getSession();
  if(isAdminPath()){
   if(session&&await isAllowedAdmin()){setView("admin");$("adminEmail").textContent=session.user.email;await loadAdminData();subscribeRealtime()}
@@ -294,7 +298,9 @@ function subscribePublicRealtime(){
 $("loginForm").addEventListener("submit",async e=>{
  e.preventDefault();if(!configured)return;
  const btn=e.submitter;btn.disabled=true;
- const {error}=await db.auth.signInWithPassword({email:$("loginEmail").value.trim(),password:$("loginPassword").value});
+ const username=$("loginEmail").value.trim();
+  if(username!==ADMIN_USERNAME){showMessage("loginMessage","Invalid username or password.",true);btn.disabled=false;return}
+  const {error}=await db.auth.signInWithPassword({email:ADMIN_AUTH_EMAIL,password:$("loginPassword").value});
  if(error){showMessage("loginMessage",error.message,true);btn.disabled=false;return}
  const allowed=await isAllowedAdmin();
  if(!allowed){await db.auth.signOut();showMessage("loginMessage","This account is not authorized as a FRODA admin. Add its user ID to the admin_users table in Supabase.",true);btn.disabled=false;return}
@@ -302,7 +308,7 @@ $("loginForm").addEventListener("submit",async e=>{
 });
 $("logoutBtn").addEventListener("click",async()=>{await db.auth.signOut();location.href="/"});
 $("viewMenuBtn").addEventListener("click",()=>location.href="/");
-if(configured)db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+if(configured && window.supabase)db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
 $("year").textContent=new Date().getFullYear();
 setLanguage("en");
 if(configured){
